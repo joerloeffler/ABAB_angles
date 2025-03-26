@@ -1,0 +1,6 @@
+{
+    "pdb_file": "amber.pdb",
+    "antibody1_residues": ["230-468"],
+    "antibody2_residues": ["469-694"],
+    "antigen_residues": ["695-794"]
+}
