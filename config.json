@@ -1,6 +1,21 @@
 {
-    "pdb_file": "amber.pdb",
-    "antibody1_residues": ["230-468"],
-    "antibody2_residues": ["469-694"],
-    "antigen_residues": ["695-794"]
+  "pdb_file": "pdbfiles",
+  "antibody1": {
+    "segments": [
+      { "segid": "A", "residues": ["1-124"] },
+      { "segid": "B", "residues": ["229-337"] }
+    ]
+  },
+  "antibody2": {
+    "segments": [
+      { "segid": "D" },
+      { "segid": "C" }
+    ]
+  },
+  "antigen": {
+    "segments": [
+      { "segid": "E" },
+      { "segid": "F" }
+    ]
+  }
 }
