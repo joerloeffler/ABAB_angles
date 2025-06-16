@@ -1,56 +1,151 @@
+#!/usr/bin/env python3
+"""
+calculate_angle_com.py
+Compute COMs for two antibodies + antigen, output the angle,
+and (optionally) write ChimeraX visualisation script.
+
+Usage:
+    python calculate_angle_com.py config.json [--chimera] 
+"""
+import os
 import json
+import argparse
 import MDAnalysis as mda
 import numpy as np
 import pandas as pd
 
-def load_config(config_file):
-    with open(config_file, 'r') as f:
-        return json.load(f)
+
+# ──────────────────────────── helpers ────────────────────────────
+def load_config(path):
+    with open(path, "r") as fh:
+        return json.load(fh)
+
 
 def parse_residue_ranges(ranges):
-    residues = []
+    """Expand list like ['1-5', '8'] → [1,2,3,4,5,8]."""
+    out = []
     for r in ranges:
         if "-" in r:
-            start, end = map(int, r.split("-"))
-            residues.extend(range(start, end + 1))
+            a, b = map(int, r.split("-"))
+            out.extend(range(a, b + 1))
         else:
-            residues.append(int(r))
-    return residues
+            out.append(int(r))
+    return out
 
-def calculate_com(universe, residue_ranges):
-    residues = parse_residue_ranges(residue_ranges)
-    selection = " or ".join([f"resid {r}" for r in residues])
-    atoms = universe.select_atoms(f"protein and ({selection})")
+
+def build_selection(block):
+    """
+    Build an MDAnalysis selection string.
+      - full chains: {"segid": "E"}
+      - segid+residues: {"segid": "A", "residues": ["1-122"]}
+    """
+    clauses = []
+    for seg in block["segments"]:
+        sid = seg["segid"]
+        if "residues" in seg:
+            res_clause = " or ".join(f"resid {r}" for r in parse_residue_ranges(seg["residues"]))
+            clauses.append(f"(segid {sid} and ({res_clause}))")
+        else:
+            clauses.append(f"(segid {sid})")
+    return " or ".join(clauses)
+
+
+def com(universe, selection):
+    atoms = universe.select_atoms(f"({selection}) and name CA")  # backbone CA only
+    if not len(atoms):
+        raise ValueError(f"No atoms selected for: {selection}")
     return atoms.center_of_mass()
 
-def calculate_angle(com1, com2, com3):
-    vec1 = com1 - com3  # Vector from antigen to antibody 1
-    vec2 = com2 - com3  # Vector from antigen to antibody 2
-    cosine_angle = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
-    return np.degrees(np.arccos(np.clip(cosine_angle, -1.0, 1.0)))
 
-def write_pdb(coms, output_pdb):
-    with open(output_pdb, 'w') as f:
-        for i, (name, com) in enumerate(coms.items(), start=1):
-            f.write(f"HETATM{i:5d}  CA  {name[:3].upper()} A   1    {com[0]:8.3f}{com[1]:8.3f}{com[2]:8.3f}  1.00  0.00           C\n")
+def angle(a, b, c):
+    v1, v2 = a - c, b - c
+    cosang = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+    return np.degrees(np.arccos(np.clip(cosang, -1.0, 1.0)))
 
-def main(config_file):
-    config = load_config(config_file)
-    u = mda.Universe(config["pdb_file"])
 
-    com_antibody1 = calculate_com(u, config["antibody1_residues"])
-    com_antibody2 = calculate_com(u, config["antibody2_residues"])
-    com_antigen = calculate_com(u, config["antigen_residues"])
+# ──────────────────────────── writers ────────────────────────────
+def write_pdb(com_dict, out_pdb):
+    """Write COMs as three pseudo-atoms; resnames A1, A2, AG (3 chars)."""
+    with open(out_pdb, "w") as fh:
+        for i, coord in enumerate(com_dict.values(), start=1):
+            resname = ("A1", "A2", "AG")[i - 1]  # ANT1/ANT2/ANTG labels in scripts
+            fh.write(
+                f"HETATM{i:5d}  CA  {resname:<3s} A{i:4d}    "
+                f"{coord[0]:8.3f}{coord[1]:8.3f}{coord[2]:8.3f}  1.00  0.00           C\n"
+            )
 
-    angle = calculate_angle(com_antibody1, com_antibody2, com_antigen)
 
-    coms = {"ANT1": com_antibody1, "ANT2": com_antibody2, "ANTG": com_antigen}
-    write_pdb(coms, "com_visualization.pdb")
+def write_chimerax(angle_deg, pdb_file, com_pdb, out_cxc):
+    with open(out_cxc, "w") as fh:
+        fh.write(f"""\
+open {pdb_file}
+open {com_pdb}
+set bgColor white
 
-    df = pd.DataFrame([{"Angle": angle}])
-    df.to_csv("angle_output.csv", index=False)
+# Show cartoon for structure
+show #1 cartoon
+hide #1 atoms
 
-    print(f"Angle between antibodies: {angle:.2f} degrees")
+# Color
+style #2 sphere
+
+color #2/A:1@CA black
+color #2/A:2@CA black
+color #2/A:3@CA black
+
+# Show distances + angle
+distance #2/A:1@CA #2/A:3@CA
+distance #2/A:2@CA #2/A:3@CA
+
+distance style dashes 1
+distance style color black
+
+hide #3.1 models
+
+angle #2/A:1@CA #2/A:3@CA #2/A:2@CA
+lighting soft
+
+
+""")
+
+
+
+# ──────────────────────────── main ────────────────────────────
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("config_file", help="JSON config")
+    ap.add_argument("--chimera", action="store_true", help="write ChimeraX script")
+    ap.add_argument("--pymol",   action="store_true", help="write PyMOL script")
+    args = ap.parse_args()
+
+    cfg = load_config(args.config_file)
+    pdb_path = cfg["pdb_file"]
+    tag      = os.path.splitext(os.path.basename(pdb_path))[0]
+
+    out_pdb  = f"{tag}_coms.pdb"
+    out_csv  = f"{tag}_angle.csv"
+    out_cxc  = f"{tag}_visualize.cxc"
+
+    u = mda.Universe(pdb_path)
+
+    sel1 = build_selection(cfg["antibody1"])
+    sel2 = build_selection(cfg["antibody2"])
+    sel3 = build_selection(cfg["antigen"])
+
+    c1, c2, c3 = com(u, sel1), com(u, sel2), com(u, sel3)
+    ang = angle(c1, c2, c3)
+
+    # write outputs
+    write_pdb({"ANT1": c1, "ANT2": c2, "ANTG": c3}, out_pdb)
+    #pd.DataFrame([{"Angle_deg": ang}]).to_csv(out_csv, index=False)
+    pd.DataFrame([{"Angle_deg": round(ang, 2)}]).to_csv(out_csv, index=False)
+    print(f"Angle ANT1–ANT2 about ANTG: {ang:.2f}°")
+
+    if args.chimera:
+        write_chimerax(ang, pdb_path, out_pdb, out_cxc)
+        print(f"ChimeraX script → {out_cxc}")
+
+
 
 if __name__ == "__main__":
-    main("config.json")
+    main()
