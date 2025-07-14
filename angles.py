@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-angles_distances.py
+angles.py
 Compute COMs for two antibodies + antigen, output the angle and distances,
 and (optionally) write ChimeraX or PyMOL visualisation scripts.
 
 Usage:
-    python calculate_angle_com.py config.json [--chimera] [--pymol]
+    python angles.py config.json [--chimera] [--pymol]
 """
 import os
 import json
