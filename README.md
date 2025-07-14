@@ -22,7 +22,7 @@ config.json: JSON file specifying the input PDB and selection definitions.
 | `<pdbtag>_coms.pdb`  | Pseudo-atoms at computed COM positions |
 | -------------------- | -------------------------------------- |
 ```
-## Example jsopn file 
+## Example json file 
 ```json
 {
   "pdb_file": "structure.pdb",
