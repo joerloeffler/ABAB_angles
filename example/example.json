@@ -1,0 +1,30 @@
+{
+  "pdb_file": "example.pdb",
+  "antibody1": {
+    "segments": [
+      {
+        "segid": "N"
+      },
+      {
+        "segid": "W"
+      }
+    ]
+  },
+  "antibody2": {
+    "segments": [
+      {
+        "segid": "C"
+      },
+      {
+        "segid": "D"
+      }
+    ]
+  },
+  "antigen": {
+    "segments": [
+      {
+        "segid": "E"
+      }
+    ]
+  }
+}
