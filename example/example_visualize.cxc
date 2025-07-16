@@ -1,0 +1,26 @@
+open example.pdb
+open example_coms.pdb
+set bgColor white
+
+# Show cartoon for structure
+show #1 cartoon
+hide #1 atoms
+
+# Color and style
+style #2 sphere
+color #2/A:1@CA black
+color #2/A:2@CA black
+color #2/A:3@CA black
+
+# Show distances and angle
+distance #2/A:1@CA #2/A:3@CA
+distance #2/A:2@CA #2/A:3@CA
+distance #2/A:1@CA #2/A:2@CA
+
+distance style dashes 1
+distance style color black
+
+hide #3.1 models
+
+angle #2/A:1@CA #2/A:3@CA #2/A:2@CA
+lighting soft
